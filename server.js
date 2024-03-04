@@ -7,6 +7,7 @@ const fs = require('fs');
 const url = require('url');
 const uuid = require('uuid');
 const AWS = require('aws-sdk');
+const { get } = require('http');
 
 let config = undefined
 if (fs.existsSync('./config.js')) {
@@ -29,10 +30,10 @@ let options = {
 let chime = undefined
 if (config) {
     console.log("[NOTE] USE Config Credential")
-    chime = new AWS.Chime({ region: 'us-east-1', credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey } });
+    chime = new AWS.ChimeSDKMeetings({ region: 'us-east-1', credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey } });
 } else {
     console.log("[NOTE] USE Default Credential")
-    chime = new AWS.Chime({ region: 'us-east-1' });
+    chime = new AWS.ChimeSDKMeetings({ region: 'us-east-1' });
 }
 
 const alternateEndpoint = process.env.ENDPOINT;
@@ -42,8 +43,9 @@ if (alternateEndpoint) {
     AWS.NodeHttpClient.sslAgent.options.rejectUnauthorized = false;
     chime.endpoint = new AWS.Endpoint(alternateEndpoint);
 } else {
-    chime.endpoint = new AWS.Endpoint('https://service.chime.aws.amazon.com/console');
+    chime.endpoint = new AWS.Endpoint('https://meetings-chime.us-east-1.amazonaws.com');
 }
+
 
 console.log(chime.endpoint)
 const meetingCache = {};
@@ -94,12 +96,15 @@ const server = require(protocol).createServer(options, async (request, response)
                 const title = query.title;
                 const userName = query.userName;
 
-                const res = await chime.listMeetings().promise();
+                //const res = await chime.getMeetingsList()
 
-                let meeting_exists = false
+                //let meeting_exists = false
+                
+                // TODO: actually verify the meetingCache against the server with a Get Request 
+                let meeting_exists = meetingCache[title]!=undefined
 
 
-                console.log("res:", res)
+                /* console.log("res:", res)
                 console.log("cache:", meetingCache)
                 for (let i = 0; i < res.Meetings.length; i++) {
                     if (!meetingCache[title]) {
@@ -108,19 +113,22 @@ const server = require(protocol).createServer(options, async (request, response)
                     if (meetingCache[title].Meeting.MeetingId === res.Meetings[i].MeetingId) {
                         meeting_exists = true
                     }
-                }
+                } */
 
                 if (!meeting_exists) {
                     console.log("Create New Meeting: " + title)
                     meetingCache[title] = await chime
                         .createMeeting({
                             ClientRequestToken: uuid.v4(),
+                            MediaRegion: 'us-east-1',
+                            ExternalMeetingId: title
                         })
                         .promise();
                     attendeeCache[title] = {};
                 } else {
                     console.log("Meeting " + title + " exists")
                 }
+
                 const joinInfo = {
                     JoinInfo: {
                         Title: title,
